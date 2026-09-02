@@ -13,25 +13,7 @@ class GameScene extends Phaser.Scene{
  s=load();hud!:Phaser.GameObjects.Text;toast?:Phaser.GameObjects.Text;hero!:Phaser.GameObjects.Container;modal?:Phaser.GameObjects.Container;
  constructor(){super('main')}
  create(){this.input.enabled=true;this.input.topOnly=true;this.cameras.main.setBackgroundColor(0xbfe2ad);this.world();this.hudBar();this.heroGirl();this.quests();this.s.buildings.forEach(b=>this.drawBuilding(b,false));this.offline();this.input.on('pointerdown',this.handlePointer,this);this.time.addEvent({delay:1000,loop:true,callback:()=>{this.tick();this.breathe()}});save(this.s)}
- handlePointer(pointer:Phaser.Input.Pointer){
-  const x=pointer.worldX,y=pointer.worldY;
-  if(this.modal){
-   const mx=this.modal.x,my=this.modal.y;
-   if(Math.abs(x-mx)<=125&&y>=my-84&&y<=my+104){
-    const i=Math.floor((y-(my-82))/43);
-    if(i>=0&&i<BP.length){this.build(BP[i],mx,my+115);return}
-   }
-   if(Math.abs(x-mx)>135||Math.abs(y-my)>125){this.modal.destroy();this.modal=undefined}
-   return
-  }
-  for(const [px,py] of PLOTS){
-   if(Math.abs(x-px)<=58&&Math.abs(y-py)<=45){
-    const occupied=this.s.buildings.some(b=>Math.abs(b.x-px)<3&&Math.abs(b.y-py)<3);
-    if(!occupied)this.openBuild(px,py);else this.flash('Участок уже занят');
-    return
-   }
-  }
- }
+ handlePointer(pointer:Phaser.Input.Pointer){const x=pointer.worldX,y=pointer.worldY;if(this.modal){const mx=this.modal.x,my=this.modal.y;if(Math.abs(x-mx)<=125&&y>=my-84&&y<=my+104){const i=Math.floor((y-(my-82))/43);if(i>=0&&i<BP.length){this.build(BP[i],mx,my+115);return}}if(Math.abs(x-mx)>135||Math.abs(y-my)>125){this.modal.destroy();this.modal=undefined}return}for(const [px,py] of PLOTS){if(Math.abs(x-px)<=58&&Math.abs(y-py)<=45){const occupied=this.s.buildings.some(b=>Math.abs(b.x-px)<3&&Math.abs(b.y-py)<3);if(!occupied)this.openBuild(px,py);else this.flash('Участок уже занят');return}}}
  world(){this.add.rectangle(400,300,800,600,0xbfe2ad);for(let i=0;i<18;i++){const x=25+(i*73)%750,y=185+(i*41)%125;this.add.circle(x,y,24,0x75ad65,.55);this.add.circle(x-10,y-14,15,0x86bd70,.65)}this.add.rectangle(400,355,770,390,0xa9cf91).setStrokeStyle(3,0x88aa72);this.add.text(24,145,'🌿 УСАДЬБА ЛЁВЫ',{fontSize:'20px',fontStyle:'bold',color:'#294b31'});this.add.text(24,169,'Строй, собирай и открывай новые уголки.',{fontSize:'13px',color:'#4b684f'});PLOTS.forEach(p=>this.plot(p[0],p[1]))}
  plot(x:number,y:number){const occupied=()=>this.s.buildings.some(b=>Math.abs(b.x-x)<3&&Math.abs(b.y-y)<3);const c=this.add.container(x,y);const base=this.add.rectangle(0,0,108,82,0xd6bd86).setStrokeStyle(3,0xa58a59).setInteractive({useHandCursor:true});c.add(base);const plus=this.add.text(0,0,'＋',{fontSize:'30px',color:'#816b42'}).setOrigin(.5);c.add(plus);base.on('pointerdown',()=>{if(!occupied())this.openBuild(x,y);else this.flash('Этот участок уже занят')});if(occupied()){base.setAlpha(0);plus.setAlpha(0)}}
  hudBar(){this.add.rectangle(400,58,770,82,0xf8fff2).setStrokeStyle(2,0x8da889);this.hud=this.add.text(24,30,'',{fontSize:'17px',fontStyle:'bold',color:'#29452f',lineSpacing:7});this.updateHud()}
@@ -46,6 +28,6 @@ class GameScene extends Phaser.Scene{
  tick(){for(const b of this.s.buildings){this.s.coins+=b.rate;if(b.id==='garden')this.s.food++}this.updateHud();save(this.s)}
  offline(){const sec=Math.min(3600,Math.max(0,Math.floor((Date.now()-this.s.lastSeen)/1000)));if(sec>20&&this.s.buildings.length){const gain=this.s.buildings.reduce((n,b)=>n+b.rate,0)*sec;this.s.coins+=gain;this.flash(`Пока тебя не было: +${gain}🪙`);this.updateHud()}}
  gain(n:number){this.s.xp+=n;while(this.s.xp>=this.s.level*100){this.s.xp-=this.s.level*100;this.s.level++;this.s.quests.level=this.s.level;this.flash(`⭐ Уровень ${this.s.level}!`)}this.updateHud()}
- flash(msg:string){this.toast?.destroy();this.toast=this.add.text(400,445,msg,{fontSize:'17px',fontStyle:'bold',color:'#29452f',backgroundColor:'#fff',padding:{x:14,y:9}}.setOrigin?.(0.5) as Phaser.GameObjects.Text);this.tweens.add({targets:this.toast,y:415,alpha:0,duration:1500,delay:500,onComplete:()=>this.toast?.destroy()})}
+ flash(msg:string){this.toast?.destroy();this.toast=this.add.text(400,445,msg,{fontSize:'17px',fontStyle:'bold',color:'#29452f',backgroundColor:'#fff',padding:{x:14,y:9}}).setOrigin(.5).setDepth(50);this.tweens.add({targets:this.toast,y:415,alpha:0,duration:1500,delay:500,onComplete:()=>this.toast?.destroy()})}
 }
 new Phaser.Game({type:Phaser.AUTO,width:800,height:600,parent:'game',scene:GameScene,scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},render:{antialias:true},input:{activePointers:2,touch:true,mouse:true}});
