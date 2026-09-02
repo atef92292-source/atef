@@ -36,7 +36,6 @@ class GameScene extends Phaser.Scene {
   rows: { y: number; bp: typeof BP[number] }[] = [];
   selectedPlot: Plot | null = null;
   toast?: Phaser.GameObjects.Text;
-  buildingObjects = new Map<string, Phaser.GameObjects.Container>();
 
   constructor() { super('main'); }
 
@@ -61,7 +60,6 @@ class GameScene extends Phaser.Scene {
     this.offline();
     this.input.on('pointerdown', this.pointerDown, this);
     this.input.on('pointermove', this.pointerMove, this);
-    this.input.on('pointerup', (p: Phaser.Input.Pointer) => { if (p.wasTouch) this.pointerDown(p); }, this);
     this.time.addEvent({ delay: 1000, loop: true, callback: () => this.tick() });
     save(this.s);
   }
@@ -168,11 +166,9 @@ class GameScene extends Phaser.Scene {
   }
 
   drawBuilding(b: Building, pop = true) {
-    const c = this.add.container(b.x, b.y).setDepth(10); this.buildingObjects.set(b.id + ':' + b.x + ':' + b.y, c);
-    const shadow = this.add.ellipse(0, 47, 104, 22, 0x274c34, .2); c.add(shadow);
-    const img = this.add.image(0, 0, ASSET[b.kind]).setScale(.63); c.add(img);
-    const badge = this.add.text(0, 63, `${b.name} · ур.${b.level}`, { fontFamily: 'Trebuchet MS', fontSize: '10px', fontStyle: 'bold', color: '#315038', backgroundColor: '#fff1ce', padding: { x: 6, y: 4 } }).setOrigin(.5); c.add(badge);
-    const rate = this.add.text(0, 84, `+${b.rate}/с  ·  КЛИК = БОНУС`, { fontFamily: 'Trebuchet MS', fontSize: '9px', fontStyle: 'bold', color: '#fff', stroke: '#365b3a', strokeThickness: 3 }).setOrigin(.5); c.add(rate);
+    const c = this.add.container(b.x, b.y).setDepth(10); const shadow = this.add.ellipse(0, 47, 104, 22, 0x274c34, .2); c.add(shadow); const img = this.add.image(0, 0, ASSET[b.kind]).setScale(.63); c.add(img);
+    c.add(this.add.text(0, 63, `${b.name} · ур.${b.level}`, { fontFamily: 'Trebuchet MS', fontSize: '10px', fontStyle: 'bold', color: '#315038', backgroundColor: '#fff1ce', padding: { x: 6, y: 4 } }).setOrigin(.5));
+    c.add(this.add.text(0, 84, `+${b.rate}/с  ·  КЛИК = БОНУС`, { fontFamily: 'Trebuchet MS', fontSize: '9px', fontStyle: 'bold', color: '#fff', stroke: '#365b3a', strokeThickness: 3 }).setOrigin(.5));
     if (pop) { c.setScale(.08); this.tweens.add({ targets: c, scale: 1, duration: 520, ease: 'Back.Out' }); this.burst(b.x, b.y); }
     this.tweens.add({ targets: img, y: -3, duration: 1300 + b.level * 80, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
   }
@@ -181,7 +177,7 @@ class GameScene extends Phaser.Scene {
 
   tick() { for (const b of this.s.buildings) { if (b.kind === 'wood') this.s.wood += b.rate; else if (b.kind === 'stone') this.s.stone += b.rate; else if (b.kind === 'food') this.s.food += b.rate; else this.s.coins += b.rate; } this.updateHud(); save(this.s); }
 
-  offline() { const sec = Math.min(3600, Math.max(0, Math.floor((Date.now() - this.s.lastSeen) / 1000))); if (sec > 20 && this.s.buildings.length) { let coins = 0, wood = 0, stone = 0, food = 0; for (const b of this.s.buildings) { if (b.kind === 'wood') wood += b.rate * sec; else if (b.kind === 'stone') stone += b.rate * sec; else if (b.kind === 'food') food += b.rate * sec; else coins += b.rate * sec; } this.s.coins += coins; this.s.wood += wood; this.s.stone += stone; this.s.food += food; this.flash(`Пока тебя не было — ресурсы накопились!`); this.updateHud(); } }
+  offline() { const sec = Math.min(3600, Math.max(0, Math.floor((Date.now() - this.s.lastSeen) / 1000))); if (sec > 20 && this.s.buildings.length) { let coins = 0, wood = 0, stone = 0, food = 0; for (const b of this.s.buildings) { if (b.kind === 'wood') wood += b.rate * sec; else if (b.kind === 'stone') stone += b.rate * sec; else if (b.kind === 'food') food += b.rate * sec; else coins += b.rate * sec; } this.s.coins += coins; this.s.wood += wood; this.s.stone += stone; this.s.food += food; this.flash('Пока тебя не было — ресурсы накопились!'); this.updateHud(); } }
 
   gain(n: number) { this.s.xp += n; while (this.s.xp >= this.s.level * 100) { this.s.xp -= this.s.level * 100; this.s.level++; this.flash(`Новый уровень: ${this.s.level}!`); } this.updateHud(); }
   value(k: string) { return String(k === 'coin' ? this.s.coins : k === 'wood' ? this.s.wood : k === 'stone' ? this.s.stone : this.s.food); }
