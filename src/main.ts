@@ -1,52 +1,199 @@
 import Phaser from 'phaser';
 
-type Kind='wood'|'stone'|'food'|'tools'|'home';
-type Building={id:string;name:string;short:string;x:number;y:number;cost:number;wood:number;rate:number;level:number;kind:Kind};
-type Save={coins:number;wood:number;stone:number;food:number;xp:number;level:number;buildings:Building[];quests:{build:number;gather:number};lastSeen:number};
-type Plot=readonly [number,number];
-const KEY='domovik-usadba-v6';
-const PLOTS:Plot[]=[[120,286],[260,286],[400,286],[540,286],[680,286],[190,430],[330,430],[470,430],[610,430]];
-const BP:Omit<Building,'x'|'y'|'level'>[]=[
-{id:'sawmill',name:'Лесопилка',short:'Производит дерево',cost:50,wood:0,rate:2,kind:'wood'},
-{id:'quarry',name:'Каменоломня',short:'Добывает камень',cost:90,wood:20,rate:3,kind:'stone'},
-{id:'garden',name:'Огород',short:'Выращивает еду',cost:110,wood:25,rate:1,kind:'food'},
-{id:'workshop',name:'Мастерская',short:'Создаёт инструменты',cost:180,wood:60,rate:6,kind:'tools'},
-{id:'house',name:'Тёплый дом',short:'Развивает усадьбу',cost:260,wood:90,rate:10,kind:'home'}];
-const fresh=():Save=>({coins:180,wood:80,stone:40,food:20,xp:0,level:1,buildings:[],quests:{build:0,gather:0},lastSeen:Date.now()});
-function load():Save{try{const r=JSON.parse(localStorage.getItem(KEY)||'null');return r?{...fresh(),...r,buildings:Array.isArray(r.buildings)?r.buildings:[],quests:{...fresh().quests,...r.quests}}:fresh()}catch{return fresh()}}
-function save(s:Save){s.lastSeen=Date.now();localStorage.setItem(KEY,JSON.stringify(s))}
-class GameScene extends Phaser.Scene{
- s=load();hud!:Phaser.GameObjects.Container;vals:Record<string,Phaser.GameObjects.Text>={};quest!:Phaser.GameObjects.Text;hero!:Phaser.GameObjects.Container;modal?:Phaser.GameObjects.Container;rows:{y:number;bp:typeof BP[number]}[]=[];toast?:Phaser.GameObjects.Text;hover!:Phaser.GameObjects.Graphics;
- constructor(){super('main')}
- create(){this.cameras.main.setBackgroundColor(0x14291d);this.input.enabled=true;this.input.topOnly=true;this.drawWorld();this.drawHud();this.drawHero();this.drawQuests();this.s.buildings.forEach(b=>this.drawBuilding(b,false));this.offline();this.input.on('pointerdown',this.pointerDown,this);this.input.on('pointermove',this.pointerMove,this);this.time.addEvent({delay:1000,loop:true,callback:()=>{this.tick();this.breathe()}});save(this.s)}
- pointerDown(p:Phaser.Input.Pointer){const x=p.worldX,y=p.worldY;if(this.modal){this.modalClick(x,y);return}if(y<90)return;for(const b of this.s.buildings){if(Math.abs(x-b.x)<60&&Math.abs(y-b.y)<58){this.collect(b);return}}for(const [px,py] of PLOTS){if(Math.abs(x-px)<63&&Math.abs(y-py)<50){if(!this.s.buildings.some(b=>Math.abs(b.x-px)<3&&Math.abs(b.y-py)<3))this.openBuild();return}}}
- pointerMove(p:Phaser.Input.Pointer){this.hover.clear();if(this.modal)return;for(const b of this.s.buildings){if(Math.abs(p.worldX-b.x)<60&&Math.abs(p.worldY-b.y)<58){this.hover.lineStyle(3,0xffe9a5,.95);this.hover.strokeCircle(b.x,b.y,55);return}}for(const [x,y] of PLOTS){if(Math.abs(p.worldX-x)<63&&Math.abs(p.worldY-y)<50&&!this.s.buildings.some(b=>Math.abs(b.x-x)<3&&Math.abs(b.y-y)<3)){this.hover.lineStyle(3,0xffe9a5,.95);this.hover.strokeRoundedRect(x-57,y-44,114,88,12);return}}}
- drawWorld(){this.add.rectangle(400,300,800,600,0x8dce73);for(let i=0;i<38;i++){const x=(i*97)%820-10,y=104+(i*31)%112;this.tree(x,y,.56+(i%3)*.08)}const river=this.add.graphics();river.fillStyle(0x4caac8,1);river.beginPath();river.moveTo(715,75);river.lineTo(800,60);river.lineTo(800,600);river.lineTo(742,600);river.lineTo(710,520);river.lineTo(727,420);river.lineTo(705,315);river.closePath();river.fillPath();for(let i=0;i<10;i++)this.add.ellipse(765,112+i*48,36,7,0xc8f1ef,.5);this.add.rectangle(400,360,758,425,0x9bd27e).setStrokeStyle(2,0x6eaa5d);const path=this.add.graphics();path.fillStyle(0xd7bb7a,1);path.beginPath();path.moveTo(35,570);path.lineTo(180,425);path.lineTo(355,365);path.lineTo(620,365);path.lineTo(775,470);path.lineTo(775,520);path.lineTo(605,410);path.lineTo(350,405);path.lineTo(205,455);path.lineTo(85,585);path.closePath();path.fillPath();for(let x=24;x<720;x+=50){this.add.rectangle(x,548,7,32,0x765338);this.add.rectangle(x+2,539,46,7,0x986c45)}for(let i=0;i<45;i++)this.flower(20+(i*101)%690,180+(i*59)%345,i%3);for(let i=0;i<14;i++)this.rock(30+(i*137)%680,205+(i*73)%315,.65+(i%2)*.18);this.add.text(26,120,'УСАДЬБА ЛЁВЫ',{fontFamily:'Trebuchet MS',fontSize:'27px',fontStyle:'bold',color:'#fff1c7',stroke:'#5d402c',strokeThickness:7});this.add.text(29,151,'Маленький дом. Большая история.',{fontFamily:'Trebuchet MS',fontSize:'14px',color:'#f7ffe9',stroke:'#42603e',strokeThickness:3});this.panel(400,112,390,48,0xf7e1a8,0x8d633d,3);this.add.text(400,112,'СТРОЙ  •  СОБИРАЙ  •  РАЗВИВАЙ',{fontFamily:'Trebuchet MS',fontSize:'14px',fontStyle:'bold',color:'#59402d'}).setOrigin(.5);this.house(650,200,.9);this.hover=this.add.graphics().setDepth(60);PLOTS.forEach(p=>this.plot(p[0],p[1]))}
- plot(x:number,y:number){if(this.s.buildings.some(b=>Math.abs(b.x-x)<3&&Math.abs(b.y-y)<3))return;const g=this.add.graphics();g.fillStyle(0xd8b86f,1);g.fillRoundedRect(x-55,y-42,110,84,12);g.lineStyle(3,0xb08449,1);g.strokeRoundedRect(x-55,y-42,110,84,12);g.lineStyle(2,0xf3dba0,1);g.strokeRoundedRect(x-48,y-35,96,70,9);this.add.text(x,y-5,'+',{fontFamily:'Trebuchet MS',fontSize:'39px',fontStyle:'bold',color:'#8a6737'}).setOrigin(.5);this.add.text(x,y+24,'ПОСТРОИТЬ',{fontFamily:'Trebuchet MS',fontSize:'9px',fontStyle:'bold',color:'#8a6737'}).setOrigin(.5)}
- drawHud(){this.hud=this.add.container(400,50).setDepth(30);this.panel(0,0,752,72,0xfff1c9,0x98704a,3,this.hud);const items:[string,number,string][]=[['coin',-303,'Монеты'],['wood',-168,'Дерево'],['stone',-33,'Камень'],['food',102,'Еда']];items.forEach(([k,x,l])=>{this.icon(k,x,-1,this.hud);this.hud.add(this.add.text(x+21,-13,l,{fontFamily:'Trebuchet MS',fontSize:'9px',color:'#806344'}).setOrigin(0,.5));const t=this.add.text(x+21,9,this.value(k),{fontFamily:'Trebuchet MS',fontSize:'16px',fontStyle:'bold',color:'#4d3928'}).setOrigin(0,.5);this.hud.add(t);this.vals[k]=t});this.hud.add(this.add.text(212,-13,'УРОВЕНЬ',{fontFamily:'Trebuchet MS',fontSize:'9px',color:'#806344'}).setOrigin(0,.5));this.vals.xp=this.add.text(212,9,`★ ${this.s.level}   ${this.s.xp}/${this.s.level*100} XP`,{fontFamily:'Trebuchet MS',fontSize:'15px',fontStyle:'bold',color:'#4d3928'}).setOrigin(0,.5);this.hud.add(this.vals.xp)}
- value(k:string){return String(k==='coin'?this.s.coins:k==='wood'?this.s.wood:k==='stone'?this.s.stone:this.s.food)}
- updateHud(){for(const k of ['coin','wood','stone','food'])this.vals[k]?.setText(this.value(k));this.vals.xp?.setText(`★ ${this.s.level}   ${this.s.xp}/${this.s.level*100} XP`);this.quest?.setText(`ПОСТРОЙ 3 ЗДАНИЯ        ${Math.min(3,this.s.quests.build)}/3\nСОБЕРИ 50 ДЕРЕВА       ${Math.min(50,this.s.quests.gather)}/50\nДОСТИГНИ 3 УРОВНЯ      ${Math.min(3,this.s.level)}/3`)}
- drawHero(){this.hero=this.add.container(85,265).setDepth(18);const g=this.add.graphics();g.fillStyle(0x35563b,.24);g.fillEllipse(0,53,76,18);g.fillStyle(0x7c55c5,1);g.fillRoundedRect(-23,-2,46,61,12);g.fillStyle(0x8e63d4,1);g.fillTriangle(-27,50,0,76,27,50);g.fillStyle(0xf0ae80,1);g.fillCircle(0,-30,24);g.fillStyle(0x4a2e25,1);g.fillCircle(0,-41,25);g.fillTriangle(-18,-50,0,-67,19,-50);g.fillStyle(0x292321,1);g.fillCircle(-8,-31,3);g.fillCircle(8,-31,3);g.lineStyle(2,0x7a443d,1);g.arc(0,-23,8,.15*Math.PI,.85*Math.PI,false);g.fillStyle(0xe6c766,1);g.fillCircle(-15,14,5);g.fillCircle(15,14,5);this.hero.add(g);this.hero.add(this.add.text(0,86,'ЛЁВА',{fontFamily:'Trebuchet MS',fontSize:'16px',fontStyle:'bold',color:'#fff4cf',stroke:'#5b4230',strokeThickness:4}).setOrigin(.5));this.hero.add(this.add.text(0,106,'Хозяин усадьбы',{fontFamily:'Trebuchet MS',fontSize:'10px',color:'#fff'}).setOrigin(.5));this.add.text(85,353,'Нажми на участок,\nчтобы построить',{fontFamily:'Trebuchet MS',fontSize:'11px',align:'center',color:'#fff4d0',stroke:'#486844',strokeThickness:3}).setOrigin(.5).setDepth(19);this.tweens.add({targets:this.hero,y:'+=4',duration:900,yoyo:true,repeat:-1,ease:'Sine.InOut'})}
- breathe(){if(this.hero)this.tweens.add({targets:this.hero.scale,x:1.02,y:1.02,duration:220,yoyo:true,ease:'Sine.InOut'})}
- drawQuests(){this.panel(612,520,330,120,0xfff0d0,0x98704a,3);this.add.text(612,477,'ЗАДАНИЯ',{fontFamily:'Trebuchet MS',fontSize:'18px',fontStyle:'bold',color:'#5b402d'}).setOrigin(.5);this.quest=this.add.text(478,501,'',{fontFamily:'Trebuchet MS',fontSize:'12px',fontStyle:'bold',color:'#68513b',lineSpacing:9});this.updateHud()}
- openBuild(){this.closeModal();this.modal=this.add.container(400,320).setDepth(70);this.panel(0,0,520,400,0xfff5da,0x8d6544,4,this.modal);this.modal.add(this.add.text(0,-171,'Что построим?',{fontFamily:'Trebuchet MS',fontSize:'25px',fontStyle:'bold',color:'#513a29'}).setOrigin(.5));this.modal.add(this.add.text(0,-141,'Выбери новое сердце для усадьбы',{fontFamily:'Trebuchet MS',fontSize:'12px',color:'#8b6c50'}).setOrigin(.5));this.modal.add(this.add.text(238,-171,'×',{fontFamily:'Trebuchet MS',fontSize:'28px',fontStyle:'bold',color:'#8b4e3e'}).setOrigin(.5));this.rows=[];BP.forEach((b,i)=>{const yy=-102+i*57;const r=this.add.rectangle(0,yy,450,48,0xfffcf1).setStrokeStyle(2,0xd4bd93);this.modal!.add(r);this.modal!.add(this.add.text(-195,yy-8,b.name,{fontFamily:'Trebuchet MS',fontSize:'15px',fontStyle:'bold',color:'#55402f'}));this.modal!.add(this.add.text(-195,yy+12,b.short,{fontFamily:'Trebuchet MS',fontSize:'10px',color:'#9a7656'}));this.modal!.add(this.add.text(126,yy-4,`${b.cost} монет`,{fontFamily:'Trebuchet MS',fontSize:'12px',fontStyle:'bold',color:'#89622e'}));if(b.wood)this.modal!.add(this.add.text(126,yy+13,`+ ${b.wood} дерева`,{fontFamily:'Trebuchet MS',fontSize:'9px',color:'#6e5a45'}));this.rows.push({y:yy,bp:b});this.tweens.add({targets:r,scaleX:1.01,scaleY:1.01,duration:650,yoyo:true,repeat:-1,ease:'Sine.InOut',delay:i*70})});this.modal.setAlpha(0);this.tweens.add({targets:this.modal,alpha:1,duration:180})}
- modalClick(x:number,y:number){if(x>620&&y>130&&y<215){this.closeModal();return}if(Math.abs(x-400)>270||Math.abs(y-320)>210){this.closeModal();return}const local=y-320;for(const row of this.rows){if(Math.abs(local-row.y)<25){this.build(row.bp);return}}}
- closeModal(){this.modal?.destroy();this.modal=undefined;this.rows=[]}
- build(bp:Omit<Building,'x'|'y'|'level'>){if(this.s.coins<bp.cost||this.s.wood<bp.wood){this.flash('Не хватает ресурсов');return}const empty=PLOTS.find(p=>!this.s.buildings.some(b=>Math.abs(b.x-p[0])<3&&Math.abs(b.y-p[1])<3));if(!empty){this.flash('Все участки заняты');return}this.s.coins-=bp.cost;this.s.wood-=bp.wood;const b={...bp,x:empty[0],y:empty[1],level:1};this.s.buildings.push(b);this.s.quests.build++;this.gain(35);this.closeModal();this.drawBuilding(b,true);this.flash(`${bp.name} построена!`);save(this.s)}
- drawBuilding(b:Building,pop=true){const c=this.add.container(b.x,b.y).setDepth(9);const g=this.add.graphics();g.fillStyle(0x426040,.2);g.fillEllipse(0,37,90,20);const wall=b.kind==='home'?0xe7c68c:b.kind==='stone'?0x8d9aa0:b.kind==='wood'?0xa76d3f:b.kind==='food'?0x78a85a:0xb17a49;const roof=b.kind==='home'?0x9b4c3d:b.kind==='stone'?0x68737a:b.kind==='wood'?0x704331:b.kind==='food'?0x4e7d43:0x805039;g.fillStyle(wall,1);g.fillRoundedRect(-39,-9,78,55,9);g.lineStyle(3,0x5c4635,1);g.strokeRoundedRect(-39,-9,78,55,9);g.fillStyle(roof,1);g.fillTriangle(-49,-9,49,-9,0,-55);g.fillStyle(0x593b2e,1);g.fillRoundedRect(-9,18,18,28,4);g.fillStyle(0xd7e8e5,1);g.fillRect(-28,4,14,13);g.fillRect(14,4,14,13);this.detail(g,b.kind);c.add(g);c.add(this.add.text(0,-13,this.symbol(b.kind),{fontFamily:'Trebuchet MS',fontSize:'22px',fontStyle:'bold',color:'#fff4d0',stroke:'#5a3b2b',strokeThickness:3}).setOrigin(.5));c.add(this.add.text(0,52,`${b.name} · ур. ${b.level}`,{fontFamily:'Trebuchet MS',fontSize:'10px',fontStyle:'bold',color:'#29452f',backgroundColor:'#fff4d4',padding:{x:5,y:3}}).setOrigin(.5));c.add(this.add.text(0,70,`+${b.rate}/с`,{fontFamily:'Trebuchet MS',fontSize:'10px',color:'#fff',stroke:'#3e5c38',strokeThickness:3}).setOrigin(.5));if(pop){c.setScale(.12);this.tweens.add({targets:c,scale:1,duration:500,ease:'Back.Out'});this.burst(b.x,b.y)}}
- detail(g:Phaser.GameObjects.Graphics,k:Kind){if(k==='wood'){g.fillStyle(0x6f4a2e,1);g.fillRect(-42,30,84,7);g.fillStyle(0x8a5b31,1);g.fillCircle(31,22,9)}else if(k==='stone'){g.lineStyle(2,0x69737b,1);g.lineBetween(-35,9,35,9);g.lineBetween(-35,27,35,27);g.lineBetween(-8,-8,-8,45);g.lineBetween(16,-8,16,45)}else if(k==='food'){g.fillStyle(0xe6b34b,1);g.fillCircle(-24,-16,4);g.fillCircle(24,-16,4);g.fillStyle(0x4f8b43,1);g.fillRect(-30,-22,12,5);g.fillRect(18,-22,12,5)}else if(k==='tools'){g.fillStyle(0x4d3b2f,1);g.fillRect(18,-32,7,38);g.fillStyle(0xd2a64b,1);g.fillRect(12,-35,19,6)}else{g.fillStyle(0x6aa5bd,1);g.fillRect(-25,-38,50,7)}}
- symbol(k:Kind){return k==='wood'?'Л':k==='stone'?'К':k==='food'?'Е':k==='tools'?'М':'Д'}
- collect(b:Building){const gain=b.rate*2+5;this.s.coins+=gain;this.s.quests.gather=Math.min(50,this.s.quests.gather+b.rate);this.gain(8);this.burst(b.x,b.y);this.flash(`Собрано +${gain} монет`);this.updateHud();save(this.s)}
- tick(){for(const b of this.s.buildings){this.s.coins+=b.rate;if(b.kind==='food')this.s.food++}this.updateHud();save(this.s)}
- offline(){const sec=Math.min(3600,Math.max(0,Math.floor((Date.now()-this.s.lastSeen)/1000)));if(sec>20&&this.s.buildings.length){const gain=this.s.buildings.reduce((n,b)=>n+b.rate,0)*sec;this.s.coins+=gain;this.flash(`Пока тебя не было: +${gain} монет`);this.updateHud()}}
- gain(n:number){this.s.xp+=n;while(this.s.xp>=this.s.level*100){this.s.xp-=this.s.level*100;this.s.level++;this.flash(`Новый уровень: ${this.s.level}!`)}this.updateHud()}
- flash(msg:string){this.toast?.destroy();this.toast=this.add.text(400,456,msg,{fontFamily:'Trebuchet MS',fontSize:'16px',fontStyle:'bold',color:'#553d2b',backgroundColor:'#fff1c9',padding:{x:15,y:10}}).setOrigin(.5).setDepth(100);this.tweens.add({targets:this.toast,y:425,alpha:0,duration:1300,delay:450,onComplete:()=>this.toast?.destroy()})}
- burst(x:number,y:number){for(let i=0;i<9;i++){const p=this.add.circle(x,y,3,0xf4d36f).setDepth(90);this.tweens.add({targets:p,x:x+Phaser.Math.Between(-55,55),y:y+Phaser.Math.Between(-55,8),alpha:0,duration:650,delay:i*25,onComplete:()=>p.destroy()})}}
- panel(x:number,y:number,w:number,h:number,fill:number,stroke:number,l:number,parent?:Phaser.GameObjects.Container){const g=this.add.graphics();g.fillStyle(fill,1);g.fillRoundedRect(x-w/2,y-h/2,w,h,14);g.lineStyle(l,stroke,1);g.strokeRoundedRect(x-w/2,y-h/2,w,h,14);if(parent)parent.add(g);return g}
- icon(k:string,x:number,y:number,parent:Phaser.GameObjects.Container){const g=this.add.graphics();g.lineStyle(2,0xd1b06c,1);g.fillStyle(0xfff8df,1);g.fillCircle(x,y,19);if(k==='coin'){g.fillStyle(0xe7b83e,1);g.fillCircle(x,y,8);g.fillStyle(0xfff2a0,1);g.fillCircle(x,y,3)}else if(k==='wood'){g.fillStyle(0x8b5b35,1);g.fillRoundedRect(x-10,y-6,20,12,5);g.lineStyle(2,0x5d3e2b,1);g.lineBetween(x-4,y-5,x-4,y+5)}else if(k==='stone'){g.fillStyle(0x87949d,1);g.fillTriangle(x-10,y+8,x+10,y+5,x,y-10)}else{g.fillStyle(0xe49c31,1);g.fillTriangle(x-6,y+9,x+8,y+9,x+2,y-10)}parent.add(g)}
- tree(x:number,y:number,s:number){const g=this.add.graphics();g.fillStyle(0x6b4a31,1);g.fillRect(x-4*s,y+8*s,8*s,30*s);g.fillStyle(0x2e7042,1);g.fillCircle(x,y,20*s);g.fillStyle(0x438957,1);g.fillCircle(x-10*s,y-8*s,14*s);g.fillCircle(x+11*s,y-5*s,13*s);g.fillStyle(0x69a85e,1);g.fillCircle(x-4*s,y-13*s,8*s)}
- flower(x:number,y:number,n:number){const g=this.add.graphics();g.fillStyle(0x5b8c45,1);g.fillRect(x,y,2,10);g.fillStyle(n===0?0xffd16b:n===1?0xff8fae:0xb99cff,1);g.fillCircle(x,y,3);g.fillCircle(x-4,y+2,3);g.fillCircle(x+4,y+2,3);g.fillStyle(0xf5e8a4,1);g.fillCircle(x,y+2,2)}
- rock(x:number,y:number,s:number){const g=this.add.graphics();g.fillStyle(0x8b9997,1);g.fillEllipse(x,y,25*s,16*s);g.fillStyle(0xb0bab4,1);g.fillEllipse(x-4*s,y-3*s,12*s,6*s)}
- house(x:number,y:number,s:number){const g=this.add.graphics();g.fillStyle(0xe7c68c,1);g.fillRoundedRect(x-35*s,y-5*s,70*s,55*s,8);g.fillStyle(0x9b4c3d,1);g.fillTriangle(x-44*s,y-5*s,x+44*s,y-5*s,x,y-48*s);g.fillStyle(0x65422f,1);g.fillRoundedRect(x-9*s,y+22*s,18*s,28*s,4);g.fillStyle(0x75a9bd,1);g.fillRect(x-26*s,y+4*s,15*s,15*s);g.fillRect(x+11*s,y+4*s,15*s,15*s);g.lineStyle(3,0x765238,1);g.strokeRoundedRect(x-35*s,y-5*s,70*s,55*s,8)}
+type Kind = 'wood' | 'stone' | 'food' | 'tools' | 'home';
+type Building = { id: string; name: string; short: string; x: number; y: number; cost: number; wood: number; rate: number; level: number; kind: Kind };
+type Save = { coins: number; wood: number; stone: number; food: number; xp: number; level: number; buildings: Building[]; quests: { build: number; gather: number }; lastSeen: number };
+type Plot = readonly [number, number];
+
+const KEY = 'domovik-usadba-v7';
+const PLOTS: Plot[] = [[120, 300], [260, 300], [400, 300], [540, 300], [680, 300], [190, 445], [330, 445], [470, 445], [610, 445]];
+const BP: Omit<Building, 'x' | 'y' | 'level'>[] = [
+  { id: 'sawmill', name: 'Лесопилка', short: 'Дерево · +2/с', cost: 50, wood: 0, rate: 2, kind: 'wood' },
+  { id: 'quarry', name: 'Каменоломня', short: 'Камень · +3/с', cost: 90, wood: 20, rate: 3, kind: 'stone' },
+  { id: 'garden', name: 'Огород', short: 'Еда · +1/с', cost: 110, wood: 25, rate: 1, kind: 'food' },
+  { id: 'workshop', name: 'Мастерская', short: 'Монеты · +6/с', cost: 180, wood: 60, rate: 6, kind: 'tools' },
+  { id: 'house', name: 'Тёплый дом', short: 'Монеты · +10/с', cost: 260, wood: 90, rate: 10, kind: 'home' }
+];
+const ASSET: Record<Kind, string> = { wood: 'sawmill', stone: 'quarry', food: 'garden', tools: 'workshop', home: 'house' };
+
+const fresh = (): Save => ({ coins: 180, wood: 80, stone: 40, food: 20, xp: 0, level: 1, buildings: [], quests: { build: 0, gather: 0 }, lastSeen: Date.now() });
+function load(): Save {
+  try {
+    const r = JSON.parse(localStorage.getItem(KEY) || 'null');
+    return r ? { ...fresh(), ...r, buildings: Array.isArray(r.buildings) ? r.buildings : [], quests: { ...fresh().quests, ...r.quests } } : fresh();
+  } catch { return fresh(); }
 }
-new Phaser.Game({type:Phaser.AUTO,width:800,height:600,parent:'game',scene:GameScene,scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},render:{antialias:true},input:{activePointers:2}});
+function save(s: Save) { s.lastSeen = Date.now(); localStorage.setItem(KEY, JSON.stringify(s)); }
+
+class GameScene extends Phaser.Scene {
+  s = load();
+  hud!: Phaser.GameObjects.Container;
+  vals: Record<string, Phaser.GameObjects.Text> = {};
+  quest!: Phaser.GameObjects.Text;
+  hero!: Phaser.GameObjects.Image;
+  hover!: Phaser.GameObjects.Graphics;
+  modal?: Phaser.GameObjects.Container;
+  rows: { y: number; bp: typeof BP[number] }[] = [];
+  selectedPlot: Plot | null = null;
+  toast?: Phaser.GameObjects.Text;
+  buildingObjects = new Map<string, Phaser.GameObjects.Container>();
+
+  constructor() { super('main'); }
+
+  preload() {
+    this.load.svg('hero', '/assets/hero.svg', { width: 180, height: 220 });
+    this.load.svg('house', '/assets/house.svg', { width: 200, height: 170 });
+    this.load.svg('sawmill', '/assets/sawmill.svg', { width: 180, height: 150 });
+    this.load.svg('quarry', '/assets/quarry.svg', { width: 180, height: 150 });
+    this.load.svg('garden', '/assets/garden.svg', { width: 180, height: 150 });
+    this.load.svg('workshop', '/assets/workshop.svg', { width: 180, height: 150 });
+  }
+
+  create() {
+    this.input.enabled = true;
+    this.input.topOnly = true;
+    this.cameras.main.setBackgroundColor(0x10251b);
+    this.drawWorld();
+    this.drawHud();
+    this.drawHero();
+    this.drawQuests();
+    this.s.buildings.forEach(b => this.drawBuilding(b, false));
+    this.offline();
+    this.input.on('pointerdown', this.pointerDown, this);
+    this.input.on('pointermove', this.pointerMove, this);
+    this.input.on('pointerup', (p: Phaser.Input.Pointer) => { if (p.wasTouch) this.pointerDown(p); }, this);
+    this.time.addEvent({ delay: 1000, loop: true, callback: () => this.tick() });
+    save(this.s);
+  }
+
+  pointerDown(p: Phaser.Input.Pointer) {
+    const x = p.worldX, y = p.worldY;
+    if (this.modal) { this.modalClick(x, y); return; }
+    if (y < 86) return;
+    for (const b of this.s.buildings) {
+      if (Math.abs(x - b.x) < 70 && Math.abs(y - b.y) < 62) { this.collect(b); return; }
+    }
+    for (const plot of PLOTS) {
+      if (Math.abs(x - plot[0]) < 60 && Math.abs(y - plot[1]) < 48) {
+        const occupied = this.s.buildings.some(b => Math.abs(b.x - plot[0]) < 3 && Math.abs(b.y - plot[1]) < 3);
+        if (!occupied) { this.selectedPlot = plot; this.openBuild(); }
+        return;
+      }
+    }
+  }
+
+  pointerMove(p: Phaser.Input.Pointer) {
+    this.hover.clear();
+    if (this.modal) return;
+    for (const b of this.s.buildings) {
+      if (Math.abs(p.worldX - b.x) < 70 && Math.abs(p.worldY - b.y) < 62) {
+        this.hover.lineStyle(4, 0xffe7a0, 0.95); this.hover.strokeCircle(b.x, b.y - 8, 60); return;
+      }
+    }
+    for (const [x, y] of PLOTS) {
+      if (Math.abs(p.worldX - x) < 60 && Math.abs(p.worldY - y) < 48 && !this.s.buildings.some(b => Math.abs(b.x - x) < 3 && Math.abs(b.y - y) < 3)) {
+        this.hover.lineStyle(4, 0xffe7a0, 0.95); this.hover.strokeRoundedRect(x - 58, y - 46, 116, 92, 16); return;
+      }
+    }
+  }
+
+  drawWorld() {
+    this.add.rectangle(400, 300, 800, 600, 0x8fcf73);
+    this.add.rectangle(400, 180, 800, 170, 0x9bdc83);
+    for (let i = 0; i < 24; i++) this.tree(28 + (i * 113) % 700, 116 + (i * 37) % 90, 0.65 + (i % 3) * 0.08);
+    const river = this.add.graphics(); river.fillStyle(0x49a9ca, 1); river.beginPath(); river.moveTo(720, 75); river.lineTo(800, 58); river.lineTo(800, 600); river.lineTo(748, 600); river.lineTo(711, 520); river.lineTo(728, 420); river.lineTo(708, 315); river.closePath(); river.fillPath();
+    for (let i = 0; i < 9; i++) this.add.ellipse(765, 108 + i * 50, 38, 7, 0xc8f2f1, 0.5);
+    const meadow = this.add.graphics(); meadow.fillStyle(0xa4d681, 1); meadow.fillRoundedRect(22, 226, 690, 350, 28); meadow.lineStyle(3, 0x6fa55e, 0.7); meadow.strokeRoundedRect(22, 226, 690, 350, 28);
+    const path = this.add.graphics(); path.fillStyle(0xd9bd7e, 1); path.beginPath(); path.moveTo(35, 575); path.lineTo(185, 430); path.lineTo(355, 370); path.lineTo(615, 370); path.lineTo(780, 475); path.lineTo(780, 525); path.lineTo(600, 415); path.lineTo(350, 410); path.lineTo(205, 460); path.lineTo(82, 590); path.closePath(); path.fillPath();
+    for (let i = 0; i < 38; i++) this.flower(35 + (i * 97) % 665, 260 + (i * 61) % 290, i % 3);
+    for (let i = 0; i < 11; i++) this.rock(40 + (i * 137) % 650, 270 + (i * 73) % 280, 0.7 + (i % 2) * 0.2);
+    for (let x = 28; x < 700; x += 50) { this.add.rectangle(x, 548, 7, 34, 0x765238); this.add.rectangle(x + 2, 539, 46, 7, 0x9a6c44); }
+    this.add.text(28, 118, 'УСАДЬБА ЛЁВЫ', { fontFamily: 'Trebuchet MS', fontSize: '29px', fontStyle: 'bold', color: '#fff0c3', stroke: '#5c3e2d', strokeThickness: 8 });
+    this.add.text(31, 151, 'Маленький дом · большая история', { fontFamily: 'Trebuchet MS', fontSize: '14px', color: '#f6ffe8', stroke: '#41613d', strokeThickness: 3 });
+    this.panel(400, 111, 390, 48, 0xffe8b1, 0x8c603d, 3);
+    this.add.text(400, 111, 'СТРОЙ  ·  СОБИРАЙ  ·  РАЗВИВАЙ', { fontFamily: 'Trebuchet MS', fontSize: '14px', fontStyle: 'bold', color: '#59402d' }).setOrigin(0.5);
+    this.add.image(650, 192, 'house').setScale(0.58).setDepth(5);
+    this.hover = this.add.graphics().setDepth(60);
+    PLOTS.forEach(p => this.plot(p[0], p[1]));
+  }
+
+  plot(x: number, y: number) {
+    const g = this.add.graphics(); g.fillStyle(0xd6b36c, 1); g.fillRoundedRect(x - 55, y - 43, 110, 86, 15); g.lineStyle(3, 0xa87942, 1); g.strokeRoundedRect(x - 55, y - 43, 110, 86, 15); g.lineStyle(2, 0xf6dda0, 1); g.strokeRoundedRect(x - 48, y - 36, 96, 72, 11);
+    this.add.text(x, y - 6, '+', { fontFamily: 'Trebuchet MS', fontSize: '38px', fontStyle: 'bold', color: '#7d5b31' }).setOrigin(0.5);
+    this.add.text(x, y + 23, 'ПОСТРОИТЬ', { fontFamily: 'Trebuchet MS', fontSize: '9px', fontStyle: 'bold', color: '#866338' }).setOrigin(0.5);
+  }
+
+  drawHud() {
+    this.hud = this.add.container(400, 50).setDepth(40); this.panel(0, 0, 752, 72, 0xfff0c6, 0x956b46, 3, this.hud);
+    const items: [string, number, string][] = [['coin', -302, 'Монеты'], ['wood', -165, 'Дерево'], ['stone', -28, 'Камень'], ['food', 109, 'Еда']];
+    for (const [k, x, label] of items) { this.icon(k, x, 0, this.hud); this.hud.add(this.add.text(x + 22, -13, label, { fontFamily: 'Trebuchet MS', fontSize: '9px', color: '#7b6046' }).setOrigin(0, .5)); const t = this.add.text(x + 22, 9, this.value(k), { fontFamily: 'Trebuchet MS', fontSize: '16px', fontStyle: 'bold', color: '#453426' }).setOrigin(0, .5); this.hud.add(t); this.vals[k] = t; }
+    this.hud.add(this.add.text(214, -13, 'УРОВЕНЬ', { fontFamily: 'Trebuchet MS', fontSize: '9px', color: '#7b6046' }).setOrigin(0, .5)); this.vals.xp = this.add.text(214, 9, '', { fontFamily: 'Trebuchet MS', fontSize: '15px', fontStyle: 'bold', color: '#453426' }).setOrigin(0, .5); this.hud.add(this.vals.xp); this.updateHud();
+  }
+
+  drawHero() {
+    this.hero = this.add.image(86, 284, 'hero').setScale(.48).setDepth(20); this.hero.setOrigin(.5, .5);
+    this.tweens.add({ targets: this.hero, y: 278, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+    this.add.text(86, 365, 'ЛЁВА', { fontFamily: 'Trebuchet MS', fontSize: '16px', fontStyle: 'bold', color: '#fff1c7', stroke: '#51382b', strokeThickness: 5 }).setOrigin(.5).setDepth(21);
+    this.add.text(86, 386, 'Хозяин усадьбы', { fontFamily: 'Trebuchet MS', fontSize: '10px', color: '#fff' }).setOrigin(.5).setDepth(21);
+  }
+
+  drawQuests() {
+    this.panel(610, 523, 330, 116, 0xffefd0, 0x956b46, 3); this.add.text(610, 482, 'ЗАДАНИЯ', { fontFamily: 'Trebuchet MS', fontSize: '18px', fontStyle: 'bold', color: '#5b402e' }).setOrigin(.5); this.quest = this.add.text(478, 504, '', { fontFamily: 'Trebuchet MS', fontSize: '12px', fontStyle: 'bold', color: '#68513d', lineSpacing: 9 }); this.updateHud();
+  }
+
+  openBuild() {
+    this.closeModal(); this.modal = this.add.container(400, 318).setDepth(90); this.panel(0, 0, 540, 416, 0xfff7df, 0x8a6040, 5, this.modal);
+    this.modal.add(this.add.text(0, -181, 'ЧТО ПОСТРОИМ?', { fontFamily: 'Trebuchet MS', fontSize: '25px', fontStyle: 'bold', color: '#4e3829' }).setOrigin(.5));
+    this.modal.add(this.add.text(0, -151, this.selectedPlot ? `Участок ${this.PlotNumber(this.selectedPlot)}` : 'Выбери новое сердце усадьбы', { fontFamily: 'Trebuchet MS', fontSize: '12px', color: '#8b6b51' }).setOrigin(.5));
+    this.modal.add(this.add.text(244, -180, '×', { fontFamily: 'Trebuchet MS', fontSize: '28px', fontStyle: 'bold', color: '#8b4e3e' }).setOrigin(.5)); this.rows = [];
+    BP.forEach((b, i) => { const yy = -108 + i * 58; const r = this.add.rectangle(0, yy, 462, 49, 0xfffdf3).setStrokeStyle(2, 0xd7c29a); this.modal!.add(r); this.modal!.add(this.add.image(-202, yy, ASSET[b.kind]).setScale(.15)); this.modal!.add(this.add.text(-165, yy - 9, b.name, { fontFamily: 'Trebuchet MS', fontSize: '15px', fontStyle: 'bold', color: '#55402f' })); this.modal!.add(this.add.text(-165, yy + 11, b.short, { fontFamily: 'Trebuchet MS', fontSize: '10px', color: '#98765b' })); this.modal!.add(this.add.text(126, yy - 4, `${b.cost} монет`, { fontFamily: 'Trebuchet MS', fontSize: '12px', fontStyle: 'bold', color: '#805c2e' })); if (b.wood) this.modal!.add(this.add.text(126, yy + 14, `+ ${b.wood} дерева`, { fontFamily: 'Trebuchet MS', fontSize: '9px', color: '#6e5a45' })); this.rows.push({ y: yy, bp: b }); });
+    this.modal.setAlpha(0); this.tweens.add({ targets: this.modal, alpha: 1, scale: 1, duration: 180, ease: 'Quad.Out' });
+  }
+
+  PlotNumber(p: Plot) { return PLOTS.findIndex(q => q[0] === p[0] && q[1] === p[1]) + 1; }
+
+  modalClick(x: number, y: number) {
+    if (!this.modal) return; if (Math.abs(x - 400) > 285 || Math.abs(y - 318) > 225) { this.closeModal(); return; }
+    const local = y - 318; for (const row of this.rows) if (Math.abs(local - row.y) < 25) { this.build(row.bp); return; }
+    if (x > 620 && y < 160) this.closeModal();
+  }
+
+  closeModal() { this.modal?.destroy(); this.modal = undefined; this.rows = []; this.selectedPlot = null; }
+
+  build(bp: Omit<Building, 'x' | 'y' | 'level'>) {
+    if (!this.selectedPlot) { this.flash('Сначала выбери участок'); return; }
+    if (this.s.coins < bp.cost || this.s.wood < bp.wood) { this.flash('Не хватает ресурсов'); return; }
+    const [x, y] = this.selectedPlot; if (this.s.buildings.some(b => Math.abs(b.x - x) < 3 && Math.abs(b.y - y) < 3)) { this.flash('Участок уже занят'); return; }
+    this.s.coins -= bp.cost; this.s.wood -= bp.wood; const b: Building = { ...bp, x, y, level: 1 }; this.s.buildings.push(b); this.s.quests.build = Math.min(3, this.s.quests.build + 1); this.gain(35); this.closeModal(); this.drawBuilding(b, true); this.flash(`${bp.name} построена!`); this.updateHud(); save(this.s);
+  }
+
+  drawBuilding(b: Building, pop = true) {
+    const c = this.add.container(b.x, b.y).setDepth(10); this.buildingObjects.set(b.id + ':' + b.x + ':' + b.y, c);
+    const shadow = this.add.ellipse(0, 47, 104, 22, 0x274c34, .2); c.add(shadow);
+    const img = this.add.image(0, 0, ASSET[b.kind]).setScale(.63); c.add(img);
+    const badge = this.add.text(0, 63, `${b.name} · ур.${b.level}`, { fontFamily: 'Trebuchet MS', fontSize: '10px', fontStyle: 'bold', color: '#315038', backgroundColor: '#fff1ce', padding: { x: 6, y: 4 } }).setOrigin(.5); c.add(badge);
+    const rate = this.add.text(0, 84, `+${b.rate}/с  ·  КЛИК = БОНУС`, { fontFamily: 'Trebuchet MS', fontSize: '9px', fontStyle: 'bold', color: '#fff', stroke: '#365b3a', strokeThickness: 3 }).setOrigin(.5); c.add(rate);
+    if (pop) { c.setScale(.08); this.tweens.add({ targets: c, scale: 1, duration: 520, ease: 'Back.Out' }); this.burst(b.x, b.y); }
+    this.tweens.add({ targets: img, y: -3, duration: 1300 + b.level * 80, yoyo: true, repeat: -1, ease: 'Sine.InOut' });
+  }
+
+  collect(b: Building) { const gain = 7 + b.rate * 2; this.s.coins += gain; this.s.quests.gather = Math.min(50, this.s.quests.gather + Math.max(1, b.rate)); if (b.kind === 'wood') this.s.wood += 2; if (b.kind === 'stone') this.s.stone += 2; if (b.kind === 'food') this.s.food += 2; this.gain(8); this.burst(b.x, b.y); this.flash(`+${gain} монет  ·  бонус собран`); this.updateHud(); save(this.s); }
+
+  tick() { for (const b of this.s.buildings) { if (b.kind === 'wood') this.s.wood += b.rate; else if (b.kind === 'stone') this.s.stone += b.rate; else if (b.kind === 'food') this.s.food += b.rate; else this.s.coins += b.rate; } this.updateHud(); save(this.s); }
+
+  offline() { const sec = Math.min(3600, Math.max(0, Math.floor((Date.now() - this.s.lastSeen) / 1000))); if (sec > 20 && this.s.buildings.length) { let coins = 0, wood = 0, stone = 0, food = 0; for (const b of this.s.buildings) { if (b.kind === 'wood') wood += b.rate * sec; else if (b.kind === 'stone') stone += b.rate * sec; else if (b.kind === 'food') food += b.rate * sec; else coins += b.rate * sec; } this.s.coins += coins; this.s.wood += wood; this.s.stone += stone; this.s.food += food; this.flash(`Пока тебя не было — ресурсы накопились!`); this.updateHud(); } }
+
+  gain(n: number) { this.s.xp += n; while (this.s.xp >= this.s.level * 100) { this.s.xp -= this.s.level * 100; this.s.level++; this.flash(`Новый уровень: ${this.s.level}!`); } this.updateHud(); }
+  value(k: string) { return String(k === 'coin' ? this.s.coins : k === 'wood' ? this.s.wood : k === 'stone' ? this.s.stone : this.s.food); }
+  updateHud() { for (const k of ['coin', 'wood', 'stone', 'food']) this.vals[k]?.setText(this.value(k)); this.vals.xp?.setText(`★ ${this.s.level}   ${this.s.xp}/${this.s.level * 100} XP`); this.quest?.setText(`ПОСТРОЙ 3 ЗДАНИЯ        ${this.s.quests.build}/3\nСОБЕРИ 50 РЕСУРСОВ      ${this.s.quests.gather}/50\nДОСТИГНИ 3 УРОВНЯ      ${Math.min(3, this.s.level)}/3`); }
+
+  flash(msg: string) { this.toast?.destroy(); this.toast = this.add.text(400, 475, msg, { fontFamily: 'Trebuchet MS', fontSize: '16px', fontStyle: 'bold', color: '#503a2a', backgroundColor: '#fff0c8', padding: { x: 16, y: 10 } }).setOrigin(.5).setDepth(120); this.tweens.add({ targets: this.toast, y: 440, alpha: 0, duration: 1300, delay: 500, onComplete: () => this.toast?.destroy() }); }
+  burst(x: number, y: number) { for (let i = 0; i < 12; i++) { const p = this.add.circle(x, y, Phaser.Math.Between(3, 5), i % 2 ? 0xffe18a : 0xffb95e).setDepth(100); this.tweens.add({ targets: p, x: x + Phaser.Math.Between(-58, 58), y: y + Phaser.Math.Between(-55, 8), alpha: 0, duration: 650 + i * 15, onComplete: () => p.destroy() }); } }
+  panel(x: number, y: number, w: number, h: number, fill: number, stroke: number, line: number, parent?: Phaser.GameObjects.Container) { const g = this.add.graphics(); g.fillStyle(fill, 1); g.fillRoundedRect(x - w / 2, y - h / 2, w, h, 16); g.lineStyle(line, stroke, 1); g.strokeRoundedRect(x - w / 2, y - h / 2, w, h, 16); if (parent) parent.add(g); return g; }
+  icon(k: string, x: number, y: number, parent: Phaser.GameObjects.Container) { const g = this.add.graphics(); g.fillStyle(0xfff9e8, 1); g.lineStyle(2, 0xd2b16d, 1); g.fillCircle(x, y, 19); if (k === 'coin') { g.fillStyle(0xe9ba43, 1); g.fillCircle(x, y, 9); g.fillStyle(0xffef9c, 1); g.fillCircle(x, y, 3); } else if (k === 'wood') { g.fillStyle(0x8d5c35, 1); g.fillRoundedRect(x - 10, y - 6, 20, 12, 5); } else if (k === 'stone') { g.fillStyle(0x89979e, 1); g.fillTriangle(x - 10, y + 8, x + 10, y + 5, x, y - 10); } else { g.fillStyle(0xe4a12f, 1); g.fillTriangle(x - 6, y + 9, x + 8, y + 9, x + 2, y - 10); } parent.add(g); }
+  tree(x: number, y: number, s: number) { const g = this.add.graphics(); g.fillStyle(0x6a4b32, 1); g.fillRect(x - 5 * s, y + 8 * s, 10 * s, 30 * s); g.fillStyle(0x2e7142, 1); g.fillCircle(x, y, 22 * s); g.fillStyle(0x438c57, 1); g.fillCircle(x - 11 * s, y - 8 * s, 15 * s); g.fillCircle(x + 12 * s, y - 5 * s, 14 * s); g.fillStyle(0x6aaa60, 1); g.fillCircle(x - 4 * s, y - 14 * s, 8 * s); }
+  flower(x: number, y: number, n: number) { const g = this.add.graphics(); g.fillStyle(0x568747, 1); g.fillRect(x, y, 2, 10); const c = n === 0 ? 0xffd16b : n === 1 ? 0xff90ae : 0xb9a0ee; g.fillStyle(c, 1); g.fillCircle(x, y, 4); g.fillCircle(x - 4, y + 2, 3); g.fillCircle(x + 4, y + 2, 3); g.fillStyle(0xfff1ae, 1); g.fillCircle(x, y + 2, 2); }
+  rock(x: number, y: number, s: number) { const g = this.add.graphics(); g.fillStyle(0x899897, 1); g.fillEllipse(x, y, 25 * s, 16 * s); g.fillStyle(0xb9c1bc, 1); g.fillEllipse(x - 4 * s, y - 3 * s, 12 * s, 6 * s); }
+}
+
+new Phaser.Game({ type: Phaser.AUTO, width: 800, height: 600, parent: 'game', scene: GameScene, scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }, render: { antialias: true }, input: { activePointers: 2 } });
