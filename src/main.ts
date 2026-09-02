@@ -1,56 +1,31 @@
 import Phaser from 'phaser';
 
-const SAVE_KEY = 'domovik-usadba-v2';
-type Building = { id: string; name: string; emoji: string; x: number; y: number; cost: number; wood: number; rate: number; level: number; color: number };
-type Save = { coins: number; wood: number; stone: number; food: number; xp: number; level: number; buildings: Building[]; quests: Record<string, number>; lastSeen: number };
-
-const BLUEPRINTS: Omit<Building,'x'|'y'|'level'>[] = [
- { id:'sawmill', name:'Лесопилка', emoji:'🌲', cost:50, wood:0, rate:2, color:0x8b5e3c },
- { id:'quarry', name:'Каменоломня', emoji:'⛏️', cost:90, wood:20, rate:3, color:0x68727b },
- { id:'garden', name:'Огород', emoji:'🥕', cost:110, wood:25, rate:1, color:0x5b8f4a },
- { id:'workshop', name:'Мастерская', emoji:'🔨', cost:180, wood:60, rate:6, color:0x9b6b3f },
- { id:'house', name:'Тёплый дом', emoji:'🏡', cost:260, wood:90, rate:10, color:0xa45b45 },
-];
-const initial: Save = { coins:180, wood:80, stone:40, food:20, xp:0, level:1, buildings:[], quests:{build:0, gather:0, level:0}, lastSeen:Date.now() };
-function load(): Save { try { return {...initial,...JSON.parse(localStorage.getItem(SAVE_KEY)||'{}'), buildings: JSON.parse(localStorage.getItem(SAVE_KEY)||'{}').buildings || []}; } catch { return {...initial}; } }
-function save(s: Save) { s.lastSeen=Date.now(); localStorage.setItem(SAVE_KEY,JSON.stringify(s)); }
-
-class GameScene extends Phaser.Scene {
- s=load(); hud!: Phaser.GameObjects.Text; toast?: Phaser.GameObjects.Text; modal?: Phaser.GameObjects.Container; selected?: {x:number,y:number}; tiles: Phaser.GameObjects.Container[]=[]; hero!: Phaser.GameObjects.Container; heroBody!: Phaser.GameObjects.Rectangle; timeText!: Phaser.GameObjects.Text;
- create(){
-  this.cameras.main.setBackgroundColor(0xcde8c4); this.drawWorld(); this.drawHud(); this.drawHero(); this.drawBuildMenu(); this.drawQuest(); this.applyOffline();
-  this.time.addEvent({delay:1000,loop:true,callback:()=>{this.tick();this.animateHero();}}); save(this.s);
- }
- drawWorld(){
-  this.add.rectangle(400,300,800,600,0xcde8c4);
-  for(let i=0;i<13;i++) this.add.circle(40+i*67,270+(i%3)*22,28,0x8fbe79,0.8);
-  this.add.rectangle(400,355,760,390,0xb8d69d).setStrokeStyle(3,0x8aaa76);
-  const spots=[[130,250],[260,250],[390,250],[520,250],[650,250],[195,385],[325,385],[455,385],[585,385]];
-  spots.forEach((p,i)=>this.makePlot(i,p[0],p[1]));
-  this.add.text(28,214,'ТВОЯ УСАДЬБА',{fontSize:'18px',color:'#36523a',fontStyle:'bold'});
- }
- makePlot(i:number,x:number,y:number){ const c=this.add.container(x,y); const base=this.add.rectangle(0,0,108,86,0xd8bf8c).setStrokeStyle(3,0xa58a59).setInteractive({useHandCursor:true}); c.add(base); c.add(this.add.text(0,0,'+',{fontSize:'32px',color:'#806a42'}).setOrigin(.5)); c.on('pointerdown',()=>this.openBuild(i,x,y)); this.tiles.push(c); }
- drawHud(){
-  this.add.rectangle(400,48,760,78,0xf9fff4).setStrokeStyle(2,0x91ad8d);
-  this.hud=this.add.text(25,18,'',{fontSize:'17px',color:'#29452f',fontStyle:'bold',lineSpacing:6}); this.updateHud();
-  this.timeText=this.add.text(665,21,'',{fontSize:'13px',color:'#657966'}); this.timeText.setText('Усадьба');
- }
- updateHud(){ if(!this.hud)return; this.hud.setText(`🪙 ${this.s.coins}     🪵 ${this.s.wood}     🪨 ${this.s.stone}     🥕 ${this.s.food}     ⭐ Ур. ${this.s.level}  (${this.s.xp}/${this.s.level*100})`); }
- drawHero(){
-  this.hero=this.add.container(55,190); this.heroBody=this.add.rectangle(0,12,30,34,0x6f4c8a).setStrokeStyle(2,0x4d365f); const head=this.add.circle(0,-12,15,0xd89b72).setStrokeStyle(2,0x5b3e31); const hat=this.add.triangle(0,-34,0,0,26,0,13,-19,0x4c7a52); const eye=this.add.circle(-5,-13,2,0x2d241e); const eye2=this.add.circle(5,-13,2,0x2d241e); this.hero.add([this.heroBody,head,hat,eye,eye2]); this.hero.add(this.add.text(0,39,'Лёва',{fontSize:'14px',color:'#29452f',fontStyle:'bold'}).setOrigin(.5)); this.tweens.add({targets:this.hero,y:'+=5',duration:900,yoyo:true,repeat:-1,ease:'Sine.easeInOut'});
- }
- animateHero(){ if(!this.hero)return; this.tweens.add({targets:this.heroBody,scaleX:1.04,duration:160,yoyo:true,ease:'Sine.easeInOut'}); }
- drawBuildMenu(){
-  this.add.text(22,500,'СТРОИТЕЛЬСТВО',{fontSize:'17px',color:'#36523a',fontStyle:'bold'});
-  this.add.text(22,525,'Нажми на пустой участок — выбери здание.',{fontSize:'13px',color:'#56705b'});
- }
- drawQuest(){ const panel=this.add.rectangle(625,500,300,135,0xf9fff4).setStrokeStyle(2,0x91ad8d); this.add.text(490,445,'ЗАДАНИЯ',{fontSize:'17px',color:'#36523a',fontStyle:'bold'}); this.add.text(490,465,'🏗 Построек:  '+this.s.buildings.length+'/3\n🪵 Собрано:  '+this.s.quests.gather+'/50\n⭐ Уровень:  '+this.s.level+'/3',{fontSize:'15px',color:'#45634b',lineSpacing:8}); }
- openBuild(slot:number,x:number,y:number){ if(this.s.buildings.some(b=>Math.hypot(b.x-x,b.y-y)<5)){this.flash('Этот участок уже занят');return;} if(this.modal)this.modal.destroy(); this.modal=this.add.container(x,y-65); const bg=this.add.rectangle(0,0,250,190,0xf9fff4).setStrokeStyle(3,0x779a77).setInteractive(); this.modal.add(bg); this.modal.add(this.add.text(0,-78,'Что построим?',{fontSize:'18px',color:'#29452f',fontStyle:'bold'}).setOrigin(.5)); BLUEPRINTS.slice(0,3).forEach((b,i)=>{const yy=-42+i*50;const btn=this.add.rectangle(0,yy,220,40,0xffffff).setStrokeStyle(2,0xb0c6ac).setInteractive({useHandCursor:true}); this.modal!.add(btn); this.modal!.add(this.add.text(-100,yy-10,`${b.emoji} ${b.name}`,{fontSize:'14px',color:'#29452f'})); this.modal!.add(this.add.text(70,yy-10,`${b.cost}🪙`,{fontSize:'13px',color:'#76551f'})); btn.on('pointerdown',()=>this.build(b,x,y));}); }
- build(bp:Omit<Building,'x'|'y'|'level'>,x:number,y:number){ if(this.s.coins<bp.cost||this.s.wood<bp.wood){this.flash('Не хватает ресурсов');return;} this.s.coins-=bp.cost;this.s.wood-=bp.wood;const b={...bp,x,y,level:1};this.s.buildings.push(b);this.s.quests.build++;this.gainXp(35);if(this.modal){this.modal.destroy();this.modal=undefined;}this.renderBuilding(b);this.flash(`${bp.emoji} ${bp.name} построено!`);save(this.s); }
- renderBuilding(b:Building){const c=this.add.container(b.x,b.y);const shadow=this.add.ellipse(0,32,82,18,0x58714f,0.18);const body=this.add.rectangle(0,0,74,55,b.color).setStrokeStyle(3,0x59452f);const roof=this.add.triangle(0,-42,-46,0,46,0,0,-48,0x7b493c);const sign=this.add.text(0,13,b.emoji,{fontSize:'25px'}).setOrigin(.5);const label=this.add.text(0,48,`${b.name} • ур.${b.level}`,{fontSize:'11px',color:'#36523a',backgroundColor:'#f9fff4',padding:{x:4,y:3}}).setOrigin(.5);c.add([shadow,body,roof,sign,label]);this.tweens.add({targets:c,scaleX:1.08,scaleY:1.08,duration:180,yoyo:true,ease:'Back.Out'});this.tweens.add({targets:roof,angle:2,duration:700,yoyo:true,repeat:-1,ease:'Sine.InOut'}); }
- tick(){ for(const b of this.s.buildings){this.s.coins+=b.rate; if(b.id==='garden')this.s.food+=1;} this.updateHud();save(this.s); }
- applyOffline(){const sec=Math.min(3600,Math.max(0,Math.floor((Date.now()-this.s.lastSeen)/1000)));if(sec>10&&this.s.buildings.length){const gain=this.s.buildings.reduce((a,b)=>a+b.rate,0)*sec;this.s.coins+=gain;this.flash(`Пока тебя не было: +${gain}🪙`);} }
- gainXp(n:number){this.s.xp+=n;while(this.s.xp>=this.s.level*100){this.s.xp-=this.s.level*100;this.s.level++;this.flash(`⭐ Новый уровень: ${this.s.level}!`);}this.updateHud();}
- flash(msg:string){this.toast?.destroy();this.toast=this.add.text(400,445,msg,{fontSize:'17px',color:'#29452f',backgroundColor:'#ffffff',padding:{x:14,y:9}}).setOrigin(.5).setDepth(20);this.tweens.add({targets:this.toast,alpha:0,y:420,duration:1300,delay:450,onComplete:()=>this.toast?.destroy()});}
+type Building={id:string;name:string;emoji:string;x:number;y:number;cost:number;wood:number;rate:number;level:number;color:number};
+type Save={coins:number;wood:number;stone:number;food:number;xp:number;level:number;buildings:Building[];quests:{build:number;gather:number;level:number};lastSeen:number};
+const KEY='domovik-usadba-v3';
+const BP:Omit<Building,'x'|'y'|'level'>[]=[
+{id:'sawmill',name:'Лесопилка',emoji:'🌲',cost:50,wood:0,rate:2,color:0x8b5e3c},{id:'quarry',name:'Каменоломня',emoji:'⛏',cost:90,wood:20,rate:3,color:0x68727b},{id:'garden',name:'Огород',emoji:'🥕',cost:110,wood:25,rate:1,color:0x5b8f4a},{id:'workshop',name:'Мастерская',emoji:'🔨',cost:180,wood:60,rate:6,color:0x9b6b3f},{id:'house',name:'Тёплый дом',emoji:'🏡',cost:260,wood:90,rate:10,color:0xa45b45}];
+const fresh=():Save=>({coins:180,wood:80,stone:40,food:20,xp:0,level:1,buildings:[],quests:{build:0,gather:0,level:0},lastSeen:Date.now()});
+function load():Save{try{const raw=JSON.parse(localStorage.getItem(KEY)||'null');return raw?{...fresh(),...raw,quests:{...fresh().quests,...raw.quests}}:fresh()}catch{return fresh()}}
+function save(s:Save){s.lastSeen=Date.now();localStorage.setItem(KEY,JSON.stringify(s))}
+class GameScene extends Phaser.Scene{
+ s=load();hud!:Phaser.GameObjects.Text;toast?:Phaser.GameObjects.Text;hero!:Phaser.GameObjects.Container;modal?:Phaser.GameObjects.Container;
+ constructor(){super('main')}
+ create(){this.cameras.main.setBackgroundColor(0xbfe2ad);this.world();this.hudBar();this.heroGirl();this.quests();this.s.buildings.forEach(b=>this.drawBuilding(b,false));this.offline();this.time.addEvent({delay:1000,loop:true,callback:()=>{this.tick();this.breathe()}});save(this.s)}
+ world(){this.add.rectangle(400,300,800,600,0xbfe2ad);for(let i=0;i<18;i++){const x=25+(i*73)%750,y=185+(i*41)%125;this.add.circle(x,y,24,0x75ad65,.55);this.add.circle(x-10,y-14,15,0x86bd70,.65)}this.add.rectangle(400,355,770,390,0xa9cf91).setStrokeStyle(3,0x88aa72);this.add.text(24,145,'🌿 УСАДЬБА ЛЁВЫ',{fontSize:'20px',fontStyle:'bold',color:'#294b31'});this.add.text(24,169,'Строй, собирай и открывай новые уголки.',{fontSize:'13px',color:'#4b684f'});[[125,250],[260,250],[395,250],[530,250],[665,250],[190,390],[325,390],[460,390],[595,390]].forEach(p=>this.plot(p[0],p[1]))}
+ plot(x:number,y:number){const occupied=()=>this.s.buildings.some(b=>Math.abs(b.x-x)<3&&Math.abs(b.y-y)<3);const c=this.add.container(x,y);const base=this.add.rectangle(0,0,108,82,0xd6bd86).setStrokeStyle(3,0xa58a59).setInteractive({useHandCursor:true});c.add(base);const plus=this.add.text(0,0,'＋',{fontSize:'30px',color:'#816b42'}).setOrigin(.5);c.add(plus);c.on('pointerdown',()=>{if(!occupied())this.openBuild(x,y)});if(occupied()){base.setAlpha(0);plus.setAlpha(0)}}
+ hudBar(){this.add.rectangle(400,58,770,82,0xf8fff2).setStrokeStyle(2,0x8da889);this.hud=this.add.text(24,30,'',{fontSize:'17px',fontStyle:'bold',color:'#29452f',lineSpacing:7});this.updateHud()}
+ updateHud(){this.hud?.setText(`🪙 ${this.s.coins}   🪵 ${this.s.wood}   🪨 ${this.s.stone}   🥕 ${this.s.food}   ⭐ ${this.s.level}  •  ${this.s.xp}/${this.s.level*100} XP`)}
+ heroGirl(){this.hero=this.add.container(72,185).setDepth(8);const shadow=this.add.ellipse(0,34,42,12,0x4e704b,.25),body=this.add.rectangle(0,10,32,39,0x8c5ac7).setStrokeStyle(2,0x583b78),head=this.add.circle(0,-18,17,0xe1a078).setStrokeStyle(2,0x6b4535),hair=this.add.circle(0,-27,18,0x51332d),hat=this.add.triangle(0,-46,-14,15,14,15,0,-2,0x4e7e55),eye1=this.add.circle(-6,-19,2,0x241d1b),eye2=this.add.circle(6,-19,2,0x241d1b);this.hero.add([shadow,body,head,hair,hat,eye1,eye2,this.add.text(0,48,'Лёва',{fontSize:'14px',fontStyle:'bold',color:'#29452f'}).setOrigin(.5)]);this.tweens.add({targets:this.hero,y:'+=5',duration:850,yoyo:true,repeat:-1,ease:'Sine.InOut'});this.tweens.add({targets:[eye1,eye2],scaleY:.15,duration:120,delay:1700,repeat:-1,repeatDelay:2600})}
+ breathe(){this.tweens.add({targets:this.hero.scale,duration:240,x:1.025,y:1.025,yoyo:true,ease:'Sine.InOut'})}
+ quests(){this.add.rectangle(620,535,330,115,0xf8fff2).setStrokeStyle(2,0x8da889);this.add.text(475,475,'📜 ЗАДАНИЯ',{fontSize:'17px',fontStyle:'bold',color:'#294b31'});this.add.text(475,498,'Построй 3 здания\nСобери 50 дерева\nДостигни 3 уровня',{fontSize:'14px',color:'#45634b',lineSpacing:7})}
+ openBuild(x:number,y:number){this.modal?.destroy();this.modal=this.add.container(x,y-115).setDepth(30);const bg=this.add.rectangle(0,0,270,240,0xf9fff4).setStrokeStyle(3,0x789778).setInteractive();this.modal.add(bg);this.modal.add(this.add.text(0,-103,'Что построим?',{fontSize:'19px',fontStyle:'bold',color:'#29452f'}).setOrigin(.5));BP.forEach((b,i)=>{const yy=-65+i*43,btn=this.add.rectangle(0,yy,242,35,0xffffff).setStrokeStyle(1,0xb2c6ad).setInteractive({useHandCursor:true});this.modal!.add(btn);this.modal!.add(this.add.text(-108,yy-9,`${b.emoji} ${b.name}`,{fontSize:'13px',color:'#29452f'}));this.modal!.add(this.add.text(72,yy-9,`${b.cost}🪙`,{fontSize:'12px',color:'#76551f'}));btn.on('pointerdown',()=>this.build(b,x,y))})}
+ build(bp:Omit<Building,'x'|'y'|'level'>,x:number,y:number){if(this.s.coins<bp.cost||this.s.wood<bp.wood){this.flash('Не хватает ресурсов');return}this.s.coins-=bp.cost;this.s.wood-=bp.wood;const b={...bp,x,y,level:1};this.s.buildings.push(b);this.s.quests.build++;this.gain(35);this.modal?.destroy();this.modal=undefined;this.drawBuilding(b,true);this.flash(`${bp.emoji} ${bp.name} готово!`);save(this.s)}
+ drawBuilding(b:Building,pop=true){const c=this.add.container(b.x,b.y).setDepth(5),shadow=this.add.ellipse(0,32,82,16,0x426040,.2),body=this.add.rectangle(0,0,74,54,b.color).setStrokeStyle(3,0x5d4735),roof=this.add.triangle(0,-42,-46,0,46,0,0,-49,0x764238),door=this.add.rectangle(0,17,14,25,0x53382d),icon=this.add.text(0,-2,b.emoji,{fontSize:'24px'}).setOrigin(.5),tag=this.add.text(0,49,`${b.name} · ур. ${b.level}`,{fontSize:'10px',color:'#29452f',backgroundColor:'#f8fff2',padding:{x:4,y:3}}).setOrigin(.5);c.add([shadow,body,roof,door,icon,tag]);if(pop){c.setScale(.1);this.tweens.add({targets:c,scale:1,duration:480,ease:'Back.Out'});this.burst(b.x,b.y)}this.tweens.add({targets:roof,angle:2,duration:900,yoyo:true,repeat:-1,ease:'Sine.InOut'});this.tweens.add({targets:icon,y:'-=3',duration:700,yoyo:true,repeat:-1,ease:'Sine.InOut'})}
+ burst(x:number,y:number){for(let i=0;i<7;i++){const p=this.add.circle(x,y,3,0xf2d36b).setDepth(20);this.tweens.add({targets:p,x:x+Phaser.Math.Between(-45,45),y:y+Phaser.Math.Between(-50,5),alpha:0,duration:650,delay:i*35,onComplete:()=>p.destroy()})}}
+ tick(){for(const b of this.s.buildings){this.s.coins+=b.rate;if(b.id==='garden')this.s.food++}this.updateHud();save(this.s)}
+ offline(){const sec=Math.min(3600,Math.max(0,Math.floor((Date.now()-this.s.lastSeen)/1000)));if(sec>20&&this.s.buildings.length){const gain=this.s.buildings.reduce((n,b)=>n+b.rate,0)*sec;this.s.coins+=gain;this.flash(`Пока тебя не было: +${gain}🪙`);this.updateHud()}}
+ gain(n:number){this.s.xp+=n;while(this.s.xp>=this.s.level*100){this.s.xp-=this.s.level*100;this.s.level++;this.s.quests.level=this.s.level;this.flash(`⭐ Уровень ${this.s.level}!`)}this.updateHud()}
+ flash(msg:string){this.toast?.destroy();this.toast=this.add.text(400,445,msg,{fontSize:'17px',fontStyle:'bold',color:'#29452f',backgroundColor:'#fff',padding:{x:14,y:9}}).setOrigin(.5).setDepth(50);this.tweens.add({targets:this.toast,y:415,alpha:0,duration:1500,delay:500,onComplete:()=>this.toast?.destroy()})}
 }
-new Phaser.Game({type:Phaser.AUTO,width:800,height:600,parent:'game',backgroundColor:'#cde8c4',scene:GameScene,scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},render:{antialias:true}});
+new Phaser.Game({type:Phaser.AUTO,width:800,height:600,parent:'game',scene:GameScene,scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},render:{antialias:true}});
