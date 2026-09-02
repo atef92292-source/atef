@@ -1,0 +1,19 @@
+{
+  "name": "domovik-usadba",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "phaser": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/ysdk": "latest",
+    "typescript": "latest",
+    "vite": "latest"
+  }
+}
